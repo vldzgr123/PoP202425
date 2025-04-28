@@ -133,7 +133,7 @@ class FinanceCLI:
             
         response = self.report_stub.ExportReport(
             report_pb2.ExportReportRequest(
-                user_id=self.current_user.user_id,
+                user_id=self.current_user['user_id'],
                 month=month,
                 format=format
             )
