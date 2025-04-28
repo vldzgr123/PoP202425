@@ -3,6 +3,7 @@ import csv
 import json
 from concurrent import futures
 import grpc
+import msgpack
 from generated import report_pb2, report_pb2_grpc
 from generated import transaction_pb2, transaction_pb2_grpc
 
@@ -23,14 +24,32 @@ class ReportService(report_pb2_grpc.ReportServiceServicer):
             end_date = f"{year}-{month}-31"
             
             # Получаем транзакции
+            # try:
+            #     transactions_response = self.transaction_stub.GetTransactions(
+            #         transaction_pb2.GetTransactionsRequest(
+            #             user_id=request.user_id,
+            #             start_date=start_date,
+            #             end_date=end_date
+            #         )
+            #     )
             try:
-                transactions_response = self.transaction_stub.GetTransactions(
+                msgpack_request = msgpack.packb({
+                    'user_id': request.user_id,
+                    'start_date': f"{request.month}-01",
+                    'end_date': f"{request.month}-31"
+                })
+                
+
+                unpacked = msgpack.unpackb(msgpack_request)
+                
+                transactions_response = self.transaction_service_stub.GetTransactions(
                     transaction_pb2.GetTransactionsRequest(
-                        user_id=request.user_id,
-                        start_date=start_date,
-                        end_date=end_date
+                        user_id=unpacked[b'user_id'].decode(),
+                        start_date=unpacked[b'start_date'].decode(),
+                        end_date=unpacked[b'end_date'].decode()
                     )
                 )
+                
             except grpc.RpcError as e:
                 context.set_code(grpc.StatusCode.INTERNAL)
                 context.set_details(f"Failed to get transactions: {e.details()}")
@@ -64,6 +83,7 @@ class ReportService(report_pb2_grpc.ReportServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal server error: {str(e)}")
             return report_pb2.MonthlyReportResponse()
+        
     def ExportReport(self, request, context):
         try:
             # Сначала получаем отчет
