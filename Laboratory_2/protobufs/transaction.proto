@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package transaction;
+
+service TransactionService {
+  rpc AddTransaction (AddTransactionRequest) returns (TransactionResponse);
+  rpc GetTransactions (GetTransactionsRequest) returns (TransactionsResponse);
+}
+
+message AddTransactionRequest {
+  string user_id = 1;
+  double amount = 2;
+  string category = 3;
+  string type = 4;
+  string description = 5;
+}
+
+message GetTransactionsRequest {
+  string user_id = 1;
+  string start_date = 2;
+  string end_date = 3;
+}
+
+message Transaction {
+  string transaction_id = 1;
+  string user_id = 2;
+  double amount = 3;
+  string category = 4;
+  string type = 5;
+  string date = 6;
+  string description = 7;
+}
+
+message TransactionResponse {
+  Transaction transaction = 1;
+}
+
+message TransactionsResponse {
+  repeated Transaction transactions = 1;
+}

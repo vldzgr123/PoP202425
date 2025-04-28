@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package report;
+
+import "protobufs/transaction.proto";
+
+service ReportService {
+  rpc GenerateMonthlyReport (MonthlyReportRequest) returns (MonthlyReportResponse);
+  rpc ExportReport (ExportReportRequest) returns (ExportReportResponse);
+}
+
+message MonthlyReportRequest {
+  string user_id = 1;
+  string month = 2;
+}
+
+message MonthlyReportResponse {
+  string user_id = 1;
+  string month = 2;
+  double total_income = 3;
+  double total_expenses = 4;
+  double balance = 5;
+  repeated transaction.Transaction transactions = 6;
+}
+
+message ExportReportRequest {
+  string user_id = 1;
+  string month = 2;
+  string format = 3; // "json" or "csv"
+}
+
+message ExportReportResponse {
+  bytes file_content = 1;
+  string file_name = 2;
+}
