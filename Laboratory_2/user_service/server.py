@@ -1,59 +1,76 @@
-from concurrent import futures
-import grpc
+import os
 import time
-from generated import report_pb2, report_pb2_grpc
-from generated import transaction_pb2, transaction_pb2_grpc
+import hashlib
+from concurrent import futures
 
-class ReportService(report_pb2_grpc.ReportServiceServicer):
-    def __init__(self, transaction_channel):
-        self.transaction_stub = transaction_pb2_grpc.TransactionServiceStub(transaction_channel)
+import grpc
+from generated import user_pb2, user_pb2_grpc
 
-    def GenerateMonthlyReport(self, request, context):
-        try:
-            # Получаем транзакции за указанный месяц
-            year_month = request.month.split('-')
-            start_date = f"{year_month[0]}-{year_month[1]}-01"
-            end_date = f"{year_month[0]}-{year_month[1]}-31"
+class UserService(user_pb2_grpc.UserServiceServicer):
+    def __init__(self):
+        self.users = {}  # In-memory storage for demo purposes
+
+    def RegisterUser(self, request, context):
+        if request.email in [u['email'] for u in self.users.values()]:
+            context.set_code(grpc.StatusCode.ALREADY_EXISTS)
+            context.set_details('User with this email already exists')
+            return user_pb2.UserResponse()
+
+        user_id = hashlib.sha256(request.email.encode()).hexdigest()[:16]
+        password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+        
+        user = {
+            'user_id': user_id,
+            'username': request.username,
+            'email': request.email,
+            'password_hash': password_hash,
+            'created_at': time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        }
+        
+        self.users[user_id] = user
+        
+        return user_pb2.UserResponse(
+            user_id=user_id,
+            username=user['username'],
+            email=user['email'],
+            created_at=user['created_at']
+        )
+
+    def LoginUser(self, request, context):
+        user = next((u for u in self.users.values() if u['email'] == request.email), None)
+        
+        if not user or user['password_hash'] != hashlib.sha256(request.password.encode()).hexdigest():
+            context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+            context.set_details('Invalid email or password')
+            return user_pb2.UserResponse()
             
-            # Получаем транзакции через gRPC
-            transactions_response = self.transaction_stub.GetTransactions(
-                transaction_pb2.GetTransactionsRequest(
-                    user_id=request.user_id,
-                    start_date=start_date,
-                    end_date=end_date
-                )
-            )
+        return user_pb2.UserResponse(
+            user_id=user['user_id'],
+            username=user['username'],
+            email=user['email'],
+            created_at=user['created_at']
+        )
+
+    def GetUser(self, request, context):
+        user = self.users.get(request.user_id)
+        if not user:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details('User not found')
+            return user_pb2.UserResponse()
             
-            # Рассчитываем итоги
-            total_income = sum(t.amount for t in transactions_response.transactions if t.type == 'income')
-            total_expenses = sum(t.amount for t in transactions_response.transactions if t.type == 'expense')
-            balance = total_income - total_expenses
-            
-            return report_pb2.MonthlyReportResponse(
-                user_id=request.user_id,
-                month=request.month,
-                total_income=total_income,
-                total_expenses=total_expenses,
-                balance=balance,
-                transactions=transactions_response.transactions
-            )
-            
-        except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Error generating report: {str(e)}")
-            return report_pb2.MonthlyReportResponse()
+        return user_pb2.UserResponse(
+            user_id=user['user_id'],
+            username=user['username'],
+            email=user['email'],
+            created_at=user['created_at']
+        )
 
 def serve():
-    # Настраиваем соединение с сервисом транзакций
-    transaction_channel = grpc.insecure_channel('localhost:50052')
-    
-    # Создаем сервер
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    report_pb2_grpc.add_ReportServiceServicer_to_server(
-        ReportService(transaction_channel), server)
-    server.add_insecure_port('[::]:50053')
+    user_pb2_grpc.add_UserServiceServicer_to_server(UserService(), server)
+    server.add_insecure_port('[::]:50051')
     server.start()
-    print("Report Service running on port 50053")
+    print("User Service running on port 50051")
     server.wait_for_termination()
 
 if __name__ == '__main__':
