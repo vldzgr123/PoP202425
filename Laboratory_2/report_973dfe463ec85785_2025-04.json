@@ -1,0 +1,25 @@
+{
+  "user_id": "973dfe463ec85785",
+  "month": "2025-04",
+  "total_income": 1000.0,
+  "total_expenses": 200.0,
+  "balance": 800.0,
+  "transactions": [
+    {
+      "transaction_id": "f3a8f053-b68f-4732-a699-cfe975ed2950",
+      "amount": 1000.0,
+      "category": "salary",
+      "type": "income",
+      "date": "2025-04-29 07:47:28",
+      "description": "Monthly salary"
+    },
+    {
+      "transaction_id": "abdcfaae-e599-451c-a15f-399bfac0bc16",
+      "amount": 200.0,
+      "category": "groceries",
+      "type": "expense",
+      "date": "2025-04-29 07:47:28",
+      "description": "Weekly shopping"
+    }
+  ]
+}

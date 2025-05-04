@@ -15,28 +15,24 @@ class ReportService(report_pb2_grpc.ReportServiceServicer):
 
     def GenerateMonthlyReport(self, request, context):
         try:
-            # Получаем параметры из запроса
             user_id = request.user_id
             month = request.month
             
-            # Проверяем формат месяца
             if '-' not in month:
                 context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
                 context.set_details("Month format should be YYYY-MM")
                 return report_pb2.MonthlyReportResponse()
             
-            # Подготавливаем MessagePack запрос
             request_data = {
                 'user_id': user_id,
                 'start_date': f"{month}-01",
                 'end_date': f"{month}-31"
             }
             
-            # Упаковываем в MessagePack
             msgpack_request = msgpack.packb(request_data)
             
-            # Распаковываем (имитируем получение от другого сервиса)
-            unpacked = msgpack.unpackb(msgpack_request, raw=False)  # raw=False для автоматического преобразования в str
+
+            unpacked = msgpack.unpackb(msgpack_request, raw=False) 
             
             # Получаем транзакции через gRPC
             transactions_response = self.transaction_service_stub.GetTransactions(
