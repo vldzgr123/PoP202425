@@ -1,0 +1,59 @@
+type User {
+  id: ID!
+  username: String!
+  email: String!
+  createdAt: String!
+}
+
+type Transaction {
+  id: ID!
+  userId: ID!
+  amount: Float!
+  category: String!
+  type: String!
+  date: String!
+  description: String
+}
+
+type MonthlyReport {
+  userId: ID!
+  month: String!
+  totalIncome: Float!
+  totalExpenses: Float!
+  balance: Float!
+  transactions: [Transaction!]!
+}
+
+type ExportResult {
+  fileContent: String!
+  fileName: String!
+}
+
+type Query {
+  getUser(id: ID!): User
+  getTransactions(userId: ID!, startDate: String, endDate: String): [Transaction!]!
+  generateMonthlyReport(userId: ID!, month: String!): MonthlyReport
+}
+
+type Mutation {
+  registerUser(username: String!, email: String!, password: String!): User!
+  loginUser(email: String!, password: String!): User!
+  addTransaction(
+    userId: ID!
+    amount: Float!
+    category: String!
+    type: String!
+    description: String
+  ): Transaction!
+  exportReport(userId: ID!, month: String!, format: String!): ExportResult!
+}
+
+type Subscription {
+  transactionAdded(userId: ID!): Transaction!
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
