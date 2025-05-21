@@ -81,6 +81,7 @@ def resolve_export_report(_, info, userId, month, format):
 @subscription.source("transactionAdded")
 async def source_transaction_added(_, info, userId):
     # Создаем очередь для данного пользователя
+    print("TEST")
     queue = asyncio.Queue()
     transaction_subscribers[userId].append(queue)
     
@@ -96,6 +97,7 @@ async def source_transaction_added(_, info, userId):
 
 @subscription.field("transactionAdded")
 def resolve_transaction_added(transaction, info, userId):
+    print("TEST")
     return transaction
 
 # Реализация резолверов
