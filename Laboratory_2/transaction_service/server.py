@@ -6,12 +6,25 @@ from concurrent import futures
 import grpc
 from generated import transaction_pb2_grpc, transaction_pb2
 import msgpack
+from graphql_api.auth import AuthService
+from .auth_middleware import jwt_middleware
+from fastapi import FastAPI
+
+app = FastAPI()
+app.middleware('http')(jwt_middleware)
 
 class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
     def __init__(self):
         self.transactions = {}  # user_id -> list of transactions
 
     def AddTransaction(self, request, context):
+        metadata = dict(context.invocation_metadata())
+        token = metadata.get('authorization', '').replace('Bearer ', '')
+        
+        payload = AuthService.verify_token(token, "transaction_service")
+        if not payload or 'write' not in payload.get('scope', []):
+            context.abort(grpc.StatusCode.PERMISSION_DENIED, "Permission denied")
+
         transaction_id = str(uuid.uuid4())
         transaction_date = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
         
@@ -43,6 +56,12 @@ class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
         )
 
     def GetTransactions(self, request, context):
+        metadata = dict(context.invocation_metadata())
+        token = metadata.get('authorization', '').replace('Bearer ', '')
+        
+        payload = AuthService.verify_token(token, "transaction_service")
+        if not payload or 'write' not in payload.get('scope', []):
+            context.abort(grpc.StatusCode.PERMISSION_DENIED, "Permission denied")
         user_transactions = self.transactions.get(request.user_id, [])
         
         # Filter by date range if provided
@@ -65,11 +84,23 @@ class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
         )
 
 def serve():
+    with open('finance_pki/certs/transaction_service/transaction_service.key', 'rb') as f:
+        private_key = f.read()
+    with open('finance_pki/certs/transaction_service/transaction_service.crt', 'rb') as f:
+        certificate = f.read()
+    with open('finance_pki/intermediate/intermediateCA.crt', 'rb') as f:
+        ca_cert = f.read()
+    
+    server_credentials = grpc.ssl_server_credentials(
+        private_key_certificate_chain_pairs=[(private_key, certificate)],
+        root_certificates=ca_cert,
+        require_client_auth=True
+    )
+    
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     transaction_pb2_grpc.add_TransactionServiceServicer_to_server(TransactionService(), server)
-    server.add_insecure_port('[::]:50052')
+    server.add_secure_port('[::]:50053', server_credentials)
     server.start()
-    print("Transaction Service running on port 50052")
     server.wait_for_termination()
 
 if __name__ == '__main__':

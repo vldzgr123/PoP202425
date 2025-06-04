@@ -8,13 +8,26 @@ from datetime import datetime
 import grpc
 from generated import report_pb2, report_pb2_grpc, transaction_pb2, transaction_pb2_grpc
 import msgpack
+from graphql_api.auth import AuthService
+from fastapi import FastAPI
+from .auth_middleware import jwt_middleware
+
+app = FastAPI()
+app.middleware('http')(jwt_middleware)
 
 class ReportService(report_pb2_grpc.ReportServiceServicer):
-    def __init__(self, transaction_service_stub):
-        self.transaction_service_stub = transaction_service_stub
+    def __init__(self):
+        self.transaction_channel = grpc.insecure_channel('localhost:50052')
+        self.transaction_stub = transaction_pb2_grpc.TransactionServiceStub(self.transaction_channel)
 
     def GenerateMonthlyReport(self, request, context):
         try:
+            metadata = dict(context.invocation_metadata())
+            token = metadata.get('authorization', '').replace('Bearer ', '')
+            
+            if not AuthService.verify_token(token, "report_service"):
+                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid token")
+            
             user_id = request.user_id
             month = request.month
             
@@ -69,6 +82,11 @@ class ReportService(report_pb2_grpc.ReportServiceServicer):
 
     def ExportReport(self, request, context):
         try:
+            metadata = dict(context.invocation_metadata())
+            token = metadata.get('authorization', '').replace('Bearer ', '')
+            
+            if not AuthService.verify_token(token, "report_service"):
+                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid token")
             # Генерируем отчет
             report = self.GenerateMonthlyReport(
                 report_pb2.MonthlyReportRequest(
@@ -142,17 +160,23 @@ class ReportService(report_pb2_grpc.ReportServiceServicer):
             return report_pb2.ExportReportResponse()
 
 def serve():
-    # Подключаемся к сервису транзакций
-    transaction_channel = grpc.insecure_channel('localhost:50052')
-    transaction_stub = transaction_pb2_grpc.TransactionServiceStub(transaction_channel)
+    with open('finance_pki/certs/report_service/report_service.key', 'rb') as f:
+        private_key = f.read()
+    with open('finance_pki/certs/report_service/report_service.crt', 'rb') as f:
+        certificate = f.read()
+    with open('finance_pki/intermediate/intermediateCA.crt', 'rb') as f:
+        ca_cert = f.read()
     
-    # Запускаем сервер отчетов
+    server_credentials = grpc.ssl_server_credentials(
+        private_key_certificate_chain_pairs=[(private_key, certificate)],
+        root_certificates=ca_cert,
+        require_client_auth=True
+    )
+    
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    report_pb2_grpc.add_ReportServiceServicer_to_server(
-        ReportService(transaction_stub), server)
-    server.add_insecure_port('[::]:50053')
+    report_pb2_grpc.add_ReportServiceServicer_to_server(ReportService(), server)
+    server.add_secure_port('[::]:50052', server_credentials)
     server.start()
-    print("Report Service running on port 50053")
     server.wait_for_termination()
 
 if __name__ == '__main__':
